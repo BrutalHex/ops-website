@@ -1,0 +1,60 @@
+
+name: Publish Helm Chart
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+jobs:
+  publish-helm-chart:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Install Helm
+        continue-on-error: false
+        uses: azure/setup-helm@v3
+        with:
+          version: latest
+
+      - name: Package Helm Chart
+        continue-on-error: false
+        run: |
+          helm package ./myapp
+
+      - name: Update Helm Repository Index
+        continue-on-error: false
+        run: |
+          helm repo index . --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+
+      - name: Generate `index.html` for GitHub Pages
+        continue-on-error: false
+        run: |
+          cat <<EOF > index.html
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>Helm Chart Repository</title>
+          </head>
+          <body>
+              <h1>Helm Charts for ${{ github.event.repository.name }}</h1>
+              <p>Repository URL: <a href="index.yaml">index.yaml</a></p>
+              <h2>Available Charts</h2>
+              <pre>$(cat index.yaml)</pre>
+          </body>
+          </html>
+          EOF
+
+      - name: Commit and Push to GitHub Pages
+        continue-on-error: false
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git add -A
+          git commit -m "Update Helm chart repository" || echo "No changes to commit"
+          git push origin main --force
