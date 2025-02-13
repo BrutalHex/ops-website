@@ -3,7 +3,17 @@ entries:
   myapp:
   - apiVersion: v2
     appVersion: 0.0.1
-    created: "2025-02-13T15:40:30.834388401Z"
+    created: "2025-02-13T15:47:21.066258712Z"
+    description: A Helm chart for Kubernetes
+    digest: 930227cc1158c66b86855e3d420a250b7a4b8b53e7eb15a98da4203e5a6a3985
+    name: myapp
+    type: application
+    urls:
+    - https://BrutalHex.github.io/ops-website/myapp-0.0.2.tgz
+    version: 0.0.2
+  - apiVersion: v2
+    appVersion: 0.0.1
+    created: "2025-02-13T15:47:21.066003357Z"
     description: A Helm chart for Kubernetes
     digest: df414c79feaac99892c61d2e8564bd51bbe9750c2b4242e394503e8e14ec420f
     name: myapp
@@ -11,4 +21,4 @@ entries:
     urls:
     - https://BrutalHex.github.io/ops-website/myapp-0.0.1.tgz
     version: 0.0.1
-generated: "2025-02-13T15:40:30.834046544Z"
+generated: "2025-02-13T15:47:21.065548863Z"
