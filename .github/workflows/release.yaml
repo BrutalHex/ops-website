@@ -1,34 +1,81 @@
 
 name: Publish Helm Chart
 on:
+  workflow_call:
+    secrets:
+      OPS_TOKEN:
+        required: true
   workflow_dispatch: {}
-  push:
-    branches:
-      - main
+
+permissions:
+  contents: write
+
 jobs:
-  publish-helm-chart:
+  release:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: write
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install Helm
-        continue-on-error: false
-        uses: azure/setup-helm@v3
         with:
-          version: latest
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Configure Git
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
 
       - name: Package Helm Chart
-        continue-on-error: false
         run: |
           helm package ./myapp
+          echo "CHART_PACKAGE=$(ls *.tgz)" >> $GITHUB_ENV
 
-      - name: Update Helm Repository Index
-        continue-on-error: false
+      - name: Extract Chart Name and Version
+        id: chart-info
         run: |
-          helm repo index . --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          CHART_NAME=$(grep '^name:' ./myapp/Chart.yaml | awk '{print $2}')
+          CHART_VERSION=$(grep '^version:' ./myapp/Chart.yaml | awk '{print $2}')
+          RELEASE_NAME="${CHART_NAME}-${CHART_VERSION}"
+          echo "CHART_NAME=${CHART_NAME}" >> $GITHUB_ENV
+          echo "CHART_VERSION=${CHART_VERSION}" >> $GITHUB_ENV
+          echo "RELEASE_NAME=${RELEASE_NAME}" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.OPS_TOKEN }}
+        with:
+          tag_name: ${{ env.RELEASE_NAME }}
+          release_name: ${{ env.RELEASE_NAME }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Helm Package to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.OPS_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./${{ env.CHART_PACKAGE }}
+          asset_name: ${{ env.CHART_PACKAGE }}
+          asset_content_type: application/gzip
+
+      - name: Checkout gh-pages Branch
+        run: |
+          git checkout gh-page || git checkout -b gh-page
+          git pull origin gh-page --allow-unrelated-histories || true
+
+      - name: Generate Helm Repository Index
+        run: |
+          # Move the Helm package to a temporary directory
+          mkdir -p .cr-release-packages
+          mv ${{ env.CHART_PACKAGE }} .cr-release-packages/
+
+          # Generate index.yaml with URLs pointing to GitHub Releases
+          helm repo index . --url https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_NAME }}/
 
       - name: Generate `index.html` for GitHub Pages
         continue-on-error: false
@@ -45,16 +92,12 @@ jobs:
               <h1>Helm Charts for ${{ github.event.repository.name }}</h1>
               <p>Repository URL: <a href="index.yaml">index.yaml</a></p>
               <h2>Available Charts</h2>
-              <pre>$(cat index.yaml)</pre>
+              <pre>$(cat ./index.yaml)</pre>
           </body>
           </html>
           EOF
-
-      - name: Commit and Push to GitHub Pages
-        continue-on-error: false
+      - name: Commit and Push Helm Repository Index
         run: |
-          git config --global user.email "github-actions@github.com"
-          git config --global user.name "GitHub Actions"
-          git add -A
-          git commit -m "Update Helm chart repository" || echo "No changes to commit"
-          git push origin main --force
+          git add index.yaml index.html
+          git commit -m "Update Helm repository index for ${{ env.RELEASE_NAME }}" || echo "No changes to commit"
+          git push origin gh-page
